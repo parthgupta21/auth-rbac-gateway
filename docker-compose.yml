@@ -1,6 +1,23 @@
 version: "3.9"
 
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: auth-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: auth_gateway
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 5s
+      retries: 10
+    networks:
+      - auth-network
+
   redis:
     image: redis:7-alpine
     container_name: auth-redis
@@ -9,6 +26,61 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 3s
+      retries: 5
+    networks:
+      - auth-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auth-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_ACCESS_SECRET=your_secret_access_key_change_this_in_production
+      - JWT_REFRESH_SECRET=your_secret_refresh_key_change_this_in_production
+      - ACCESS_TOKEN_TTL=15m
+      - REFRESH_TOKEN_TTL=7d
+      - UPSTREAM_BASE_URL=http://upstream:4000
+      - OTEL_TRACING_ENABLED=false
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=auth_gateway
+      - DB_USER=root
+      - DB_PASSWORD=rootpassword
+      - DB_DIALECT=mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - auth-network
+    restart: unless-stopped
+
+  upstream:
+    build:
+      context: ./upstream
+      dockerfile: Dockerfile
+    container_name: auth-upstream
+    ports:
+      - "4000:4000"
+    networks:
+      - auth-network
+    restart: unless-stopped
 
 volumes:
+  mysql_data:
   redis_data:
+
+networks:
+  auth-network:
+    driver: bridge

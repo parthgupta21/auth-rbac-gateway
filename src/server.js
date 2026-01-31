@@ -2,6 +2,10 @@ require("dotenv").config();
 const Koa = require("koa");
 const Router = require("koa-router");
 const bodyParser = require("koa-bodyparser");
+const { koaSwagger } = require("koa2-swagger-ui");
+const yaml = require("js-yaml");
+const fs = require("fs");
+const path = require("path");
 
 const authController = require("./auth/auth.controller");
 const errorMiddleware = require("./middlewares/error.middleware");
@@ -18,7 +22,10 @@ const { register } = require("./utils/metrics");
 
 const { sequelize, AuditLog } = require("../models");
 
-
+// Load OpenAPI spec
+const openApiSpec = yaml.load(
+  fs.readFileSync(path.join(__dirname, "../openapi/openapi.yaml"), "utf8")
+);
 
 const app = new Koa();
 app.proxy = true;
@@ -31,6 +38,16 @@ app.use(metricsMiddleware);
 app.use(errorMiddleware);
 app.use(bodyParser());
 
+/* ----------- Swagger UI ----------- */
+app.use(
+  koaSwagger({
+    routePrefix: "/api-docs",
+    swaggerOptions: {
+      spec: openApiSpec,
+    },
+  })
+);
+
 /* ----------- Public Routes ----------- */
 router.post("/auth/login", rateLimiter({ policy: "login" }), authController.login);
 router.post("/auth/refresh", rateLimiter(), authController.refresh);
@@ -42,6 +59,9 @@ router.get("/health", rateLimiter(), (ctx) => {
 router.get("/metrics", async (ctx) => {
   ctx.set("Content-Type", register.contentType);
   ctx.body = await register.metrics();
+});
+router.get("/openapi.json", (ctx) => {
+  ctx.body = openApiSpec;
 });
 
 /* ----------- Protected Routes ----------- */
