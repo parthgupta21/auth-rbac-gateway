@@ -6,6 +6,13 @@
     "host": "localhost",
     "dialect": "mysql"
   },
+  "production": {
+    "username": "root",
+    "password": "rootpassword",
+    "database": "auth_gateway",
+    "host": "mysql",
+    "dialect": "mysql"
+  },
   "test": {
     "username": "root",
     "password": null,
